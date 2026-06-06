@@ -1,0 +1,212 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- REUSABLE SECURITY PRIMITIVES ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Fetches the user role from their user profile document
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isTeacher() {
+      return isSignedIn() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        getUserRole() == 'teacher';
+    }
+
+    // --- ENTITY SCHEMA VALIDATORS ---
+    
+    function isValidUserProfile(user) {
+      return user.id is string && user.id.size() <= 128 &&
+             user.name is string && user.name.size() <= 100 &&
+             user.email is string && user.email.size() <= 100 &&
+             user.role is string && (user.role == 'student' || user.role == 'teacher') &&
+             user.avatar is string && user.avatar.size() <= 500 &&
+             (!('grade' in user) || user.grade is string) &&
+             (!('studyHabitScore' in user) || user.studyHabitScore is int) &&
+             (!('averageScore' in user) || user.averageScore is number);
+    }
+
+    function isValidLearningPath(path) {
+      return path.id is string && path.id.size() <= 128 &&
+             path.title is string && path.title.size() <= 150 &&
+             path.subject is string && path.subject.size() <= 100 &&
+             path.description is string && path.description.size() <= 1000 &&
+             path.progress is int && path.progress >= 0 && path.progress <= 100 &&
+             path.recommendedHoursPerWeek is int &&
+             path.units is list && path.units.size() <= 20;
+    }
+
+    function isValidInteractiveQuiz(quiz) {
+      return quiz.id is string && quiz.id.size() <= 128 &&
+             quiz.title is string && quiz.title.size() <= 150 &&
+             quiz.topic is string && quiz.topic.size() <= 100 &&
+             quiz.passingScore is int && quiz.passingScore >= 0 && quiz.passingScore <= 100 &&
+             quiz.questions is list && quiz.questions.size() <= 50;
+    }
+
+    function isValidQuizAttempt(attempt) {
+      return attempt.id is string && attempt.id.size() <= 128 &&
+             attempt.quizId is string && attempt.quizId.size() <= 128 &&
+             attempt.studentId is string && attempt.studentId.size() <= 128 &&
+             attempt.score is int && attempt.score >= 0 && attempt.score <= 100 &&
+             attempt.passed is bool &&
+             attempt.takenAt is string && attempt.takenAt.size() <= 50 &&
+             attempt.answers is map && attempt.answers.size() <= 100;
+    }
+
+    function isValidSecureMessage(msg) {
+      return msg.id is string && msg.id.size() <= 128 &&
+             msg.senderId is string && msg.senderId.size() <= 128 &&
+             msg.senderName is string && msg.senderName.size() <= 100 &&
+             msg.receiverId is string && msg.receiverId.size() <= 128 &&
+             msg.text is string && msg.text.size() <= 5000 &&
+             msg.timestamp is string && msg.timestamp.size() <= 50 &&
+             (!('fileAttachment' in msg) || msg.fileAttachment is map);
+    }
+
+    function isValidCloudDocument(doc) {
+      return doc.id is string && doc.id.size() <= 128 &&
+             doc.title is string && doc.title.size() <= 200 &&
+             doc.content is string && doc.content.size() <= 100000 &&
+             doc.fileType is string && (doc.fileType == 'note' || doc.fileType == 'document' || doc.fileType == 'pdf' || doc.fileType == 'spreadsheet') &&
+             doc.ownerId is string && doc.ownerId.size() <= 128 &&
+             doc.createdAt is string && doc.createdAt.size() <= 50;
+    }
+
+    function isValidCalendarEvent(evt) {
+      return evt.id is string && evt.id.size() <= 128 &&
+             evt.title is string && evt.title.size() <= 150 &&
+             evt.description is string && evt.description.size() <= 1000 &&
+             evt.dueDate is string && evt.dueDate.size() <= 50 &&
+             evt.type is string && (evt.type == 'assignment' || evt.type == 'lecture' || evt.type == 'exam' || evt.type == 'study') &&
+             evt.completed is bool &&
+             (!('associatedPathId' in evt) || evt.associatedPathId is string);
+    }
+
+    function isValidCourseNotification(notif) {
+      return notif.id is string && notif.id.size() <= 128 &&
+             notif.title is string && notif.title.size() <= 150 &&
+             notif.message is string && notif.message.size() <= 1000 &&
+             notif.type is string && (notif.type == 'info' || notif.type == 'alert' || notif.type == 'success') &&
+             notif.createdAt is string && notif.createdAt.size() <= 50 &&
+             notif.read is bool;
+    }
+
+    function isValidAnalyticMetric(metric) {
+      return metric.studentId is string && metric.studentId.size() <= 128 &&
+             metric.studentName is string && metric.studentName.size() <= 100 &&
+             metric.unitsCompleted is int &&
+             metric.averageQuizScore is number &&
+             metric.studyTimeHours is number &&
+             metric.activeStreakDays is int &&
+             metric.alertLevel is string && (metric.alertLevel == 'low' || metric.alertLevel == 'medium' || metric.alertLevel == 'high');
+    }
+
+    // --- CORES MATCH BLOCKS ---
+
+    // 1. Users profiles rules
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(userId) && isOwner(userId) && isValidUserProfile(incoming()) && 
+                    // Prevent self-assigned teachers unless authorized - standard logic
+                    (incoming().role == 'student' || incoming().email.matches('.*@(academy|university)\\.edu$'));
+      
+      allow update: if isSignedIn() && isOwner(userId) && isValidUserProfile(incoming()) && 
+                    // Prevent modifying role or UID values to prevent permission bypass
+                    incoming().role == existing().role && incoming().id == existing().id;
+      
+      allow delete: if false; // Profiles are permanent records
+    }
+
+    // 2. Learning Paths rules
+    match /paths/{pathId} {
+      allow read: if isSignedIn();
+      allow create, delete: if isTeacher();
+      allow update: if isTeacher() && isValidLearningPath(incoming());
+    }
+
+    // 3. Quizzes rules
+    match /quizzes/{quizId} {
+      allow read: if isSignedIn();
+      allow create, delete: if isTeacher();
+      allow update: if isTeacher() && isValidInteractiveQuiz(incoming());
+    }
+
+    // 4. Quiz Attempts rules
+    match /quizAttempts/{attemptId} {
+      allow read: if isSignedIn() && (isTeacher() || resource.data.studentId == request.auth.uid);
+      allow create: if isSignedIn() && isValidId(attemptId) && incoming().studentId == request.auth.uid && isValidQuizAttempt(incoming());
+      // Attempts are protected historic entries; no modification or deletion allowed
+      allow update, delete: if false;
+    }
+
+    // 5. Messages rules
+    match /messages/{messageId} {
+      allow list: if isSignedIn() && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid);
+      allow get: if isSignedIn() && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid);
+      allow create: if isSignedIn() && isValidId(messageId) && incoming().senderId == request.auth.uid && isValidSecureMessage(incoming());
+      allow update, delete: if false; // Messages are immutable
+    }
+
+    // 6. Cloud Documents rules (PII isolated notes/sheets)
+    match /documents/{documentId} {
+      // Direct get and list are restricted to owners or teachers
+      allow read: if isSignedIn() && (resource.data.ownerId == request.auth.uid || isTeacher());
+      allow create: if isSignedIn() && isValidId(documentId) && incoming().ownerId == request.auth.uid && isValidCloudDocument(incoming());
+      allow update: if isSignedIn() && resource.data.ownerId == request.auth.uid && isValidCloudDocument(incoming()) &&
+                    incoming().ownerId == existing().ownerId; // Guard the owner field
+      allow delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+    }
+
+    // 7. Calendar Events rules
+    match /calendar/{eventId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(eventId) && isValidCalendarEvent(incoming());
+      // Students can complete/toggle events they study or participate in; teachers can adjust anything.
+      allow update: if isSignedIn() && isValidCalendarEvent(incoming()) && 
+                    (isTeacher() || incoming().diff(existing()).affectedKeys().hasOnly(['completed']));
+      allow delete: if isTeacher();
+    }
+
+    // 8. Announcements and Course Notifications rules
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn();
+      allow create, delete: if isTeacher();
+      // Students can mark notification as read
+      allow update: if isSignedIn() && isValidCourseNotification(incoming()) && 
+                    (isTeacher() || incoming().diff(existing()).affectedKeys().hasOnly(['read']));
+    }
+
+    // 9. Analytics rules
+    match /analytics/{analyticId} {
+      allow read: if isSignedIn() && (isTeacher() || analyticId == request.auth.uid);
+      allow write: if isTeacher();
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Personalized Learning Platform",
+  "description": "An interactive EdTech platform for personalized student learning paths with classroom analytics, interactive quizzes, video-conferencing, local offline sync, and secure messaging.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

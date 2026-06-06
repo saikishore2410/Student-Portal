@@ -1,0 +1,176 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile containing roles and metadata for both students and teachers",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique user ID" },
+        "name": { "type": "string", "description": "Full name of the user" },
+        "email": { "type": "string", "format": "email", "description": "Academic email address" },
+        "role": { "type": "string", "enum": ["student", "teacher"], "description": "Access control role" },
+        "avatar": { "type": "string", "description": "Profile picture URL" },
+        "grade": { "type": "string", "description": "Target grade level (student only)" },
+        "studyHabitScore": { "type": "integer", "description": "0-100 study persistence score" },
+        "averageScore": { "type": "number", "description": "Average quiz and metric score" }
+      },
+      "required": ["id", "name", "email", "role"]
+    },
+    "LearningPath": {
+      "title": "LearningPath",
+      "description": "A curated study curriculum for a specific academic subject",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "subject": { "type": "string" },
+        "description": { "type": "string" },
+        "progress": { "type": "integer" },
+        "recommendedHoursPerWeek": { "type": "integer" },
+        "units": { "type": "array", "description": "Array of learning units nested in the path" }
+      },
+      "required": ["id", "title", "subject", "description", "progress"]
+    },
+    "InteractiveQuiz": {
+      "title": "InteractiveQuiz",
+      "description": "Assessments containing questions with options and explanations",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "topic": { "type": "string" },
+        "passingScore": { "type": "integer" },
+        "questions": { "type": "array" }
+      },
+      "required": ["id", "title", "topic", "passingScore", "questions"]
+    },
+    "QuizAttempt": {
+      "title": "QuizAttempt",
+      "description": "Student attempts and answers for assessments",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "quizId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "score": { "type": "integer" },
+        "passed": { "type": "boolean" },
+        "takenAt": { "type": "string", "format": "date-time" },
+        "answers": { "type": "object" }
+      },
+      "required": ["id", "quizId", "studentId", "score", "passed", "takenAt"]
+    },
+    "SecureMessage": {
+      "title": "SecureMessage",
+      "description": "Messages sent between educators and students",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "receiverId": { "type": "string" },
+        "text": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "fileAttachment": { "type": "object" }
+      },
+      "required": ["id", "senderId", "senderName", "receiverId", "text", "timestamp"]
+    },
+    "CloudDocument": {
+      "title": "CloudDocument",
+      "description": "Cloud-based lecture notes, cheat sheets, and course files",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "fileType": { "type": "string", "enum": ["note", "document", "pdf", "spreadsheet"] },
+        "size": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "synced": { "type": "boolean" }
+      },
+      "required": ["id", "title", "content", "fileType", "ownerId", "createdAt"]
+    },
+    "CalendarEvent": {
+      "title": "CalendarEvent",
+      "description": "Deadlines, lecture slots, exams, or study blocks",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "dueDate": { "type": "string", "format": "date-time" },
+        "type": { "type": "string", "enum": ["assignment", "lecture", "exam", "study"] },
+        "associatedPathId": { "type": "string" },
+        "completed": { "type": "boolean" }
+      },
+      "required": ["id", "title", "dueDate", "type", "completed"]
+    },
+    "CourseNotification": {
+      "title": "CourseNotification",
+      "description": "Urgent custom academic notifications shown inside the app",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["info", "alert", "success"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "read": { "type": "boolean" }
+      },
+      "required": ["id", "title", "message", "type", "createdAt", "read"]
+    },
+    "AnalyticMetric": {
+      "title": "AnalyticMetric",
+      "description": "Edu-analytics aggregating student study performance metrics",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "unitsCompleted": { "type": "integer" },
+        "averageQuizScore": { "type": "number" },
+        "studyTimeHours": { "type": "number" },
+        "activeStreakDays": { "type": "integer" },
+        "alertLevel": { "type": "string", "enum": ["low", "medium", "high"] }
+      },
+      "required": ["studentId", "studentName", "unitsCompleted", "averageQuizScore", "studyTimeHours", "activeStreakDays", "alertLevel"]
+    }
+  },
+  "firestore": {
+    "users": {
+      "schema": { "$ref": "UserProfile" },
+      "description": "Academic user metadata"
+    },
+    "paths": {
+      "schema": { "$ref": "LearningPath" },
+      "description": "Educational paths and nested syllabus units"
+    },
+    "quizzes": {
+      "schema": { "$ref": "InteractiveQuiz" },
+      "description": "Exams and assessments"
+    },
+    "quizAttempts": {
+      "schema": { "$ref": "QuizAttempt" },
+      "description": "Historic scores and student outputs for attempts"
+    },
+    "messages": {
+      "schema": { "$ref": "SecureMessage" },
+      "description": "Secure messaging channel conversations between educators and students"
+    },
+    "documents": {
+      "schema": { "$ref": "CloudDocument" },
+      "description": "Personal and collaborative educational lecture files"
+    },
+    "calendar": {
+      "schema": { "$ref": "CalendarEvent" },
+      "description": "Due dates, assignments, and academic sessions"
+    },
+    "notifications": {
+      "schema": { "$ref": "CourseNotification" },
+      "description": "Course announcements"
+    },
+    "analytics": {
+      "schema": { "$ref": "AnalyticMetric" },
+      "description": "Educator dashboard aggregated statistics and performance"
+    }
+  }
+}
